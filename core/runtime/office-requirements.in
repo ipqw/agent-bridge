@@ -1,0 +1,21 @@
+# Office environment on the client's PC (docs/ARCHITECTURE.md, «Офисные файлы»). One lock = CPython 3.12.
+# Regenerate with the uv pinned in core/src/office/runtime.ts (UV_VERSION), from this folder:
+#   uv pip compile office-requirements.in --universal --python-version 3.12 --generate-hashes \
+#     --only-binary :all: -o office-requirements.txt
+# Check that win_amd64 installs from wheels with hashes (from any OS, into a throwaway folder):
+#   uv pip install --target <tmp> --python-platform x86_64-pc-windows-msvc --python-version 3.12 \
+#     --require-hashes --only-binary :all: -r office-requirements.txt
+# linux x86_64 is installed for real by core/test/office-runtime.test.ts.
+# magika (markitdown) pins onnxruntime<=1.20.1 on win32, so the universal lock carries 1.20.1 everywhere.
+openpyxl
+python-docx
+python-pptx
+lxml
+defusedxml
+pandas
+markitdown[docx,pdf,pptx,xlsx,xls]
+pypdf
+pypdfium2
+pillow
+reportlab
+pywin32; sys_platform == "win32"

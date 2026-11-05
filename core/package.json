@@ -1,0 +1,35 @@
+{
+  "name": "agent-bridge-core",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent Bridge core: MCP gate (allowlist + human approval) in front of local MCP servers, frpc supervisor, control UI",
+  "main": "dist/main.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build --config ui/vite.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ui/tsconfig.json",
+    "test": "node --import tsx --test test/*.test.ts",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@ellery/terminal-mcp": "0.5.1",
+    "@modelcontextprotocol/sdk": "1.30.1",
+    "@napi-rs/keyring": "2.1.0",
+    "@playwright/mcp": "0.0.83",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vite": "5.4.20"
+  }
+}

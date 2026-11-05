@@ -1,0 +1,10 @@
+# frps for the bridge on the agent's server. Own port, not :443 (left to whatever already serves it).
+# The token comes from the environment (systemd EnvironmentFile, 0600), never from this file.
+bindPort = 7000
+auth.method = "token"
+auth.token = "{{ .Envs.FRPS_TOKEN }}"
+# stcp only: no vhost/http listeners, no dashboard
+log.to = "console"
+log.level = "info"
+log.disablePrintColor = true
+transport.tls.force = true

@@ -1,0 +1,135 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+    # a version tag (set only by the owner's decision) also publishes a GitHub release
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: core tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.20.2"
+          cache: npm
+          cache-dependency-path: core/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: node ../scripts/fetch-frp.mjs .cache/frp
+      # office (#1): the runtime the client gets on «Включить» (pinned uv -> CPython 3.12 -> hashed lock),
+      # installed cold on every run; office_read cold start goes to the job summary. Tests reuse it.
+      - name: office environment + office_read cold start
+        shell: bash
+        run: node --import tsx ../scripts/ci-office.mts timing
+      - name: LibreOffice MSI pin
+        if: runner.os == 'Windows'
+        id: lo
+        shell: bash
+        run: |
+          read -r sha url < <(node --import tsx ../scripts/ci-office.mts msi-info)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: LibreOffice MSI cache
+        if: runner.os == 'Windows'
+        id: lo-cache
+        uses: actions/cache@v4
+        with:
+          path: core/.cache/lo-msi
+          key: libreoffice-msi-${{ steps.lo.outputs.sha }}
+      # what «Скачать» does after the client's consent (consent emulated): a cache miss downloads through
+      # the bridge's own code; a hit hands the cached MSI over (sha256 still checked). Exports SB_SOFFICE.
+      - name: LibreOffice through the consent path
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $msi = Join-Path (Get-Location) ".cache/lo-msi/lo.msi"
+          if (Test-Path $msi) { $env:SB_LIBREOFFICE_MSI = $msi; "SB_LIBREOFFICE_MSI=$msi" >> $env:GITHUB_ENV }
+          node --import tsx ../scripts/ci-office.mts libreoffice
+      - name: LibreOffice MSI cache fill (cache miss only)
+        if: runner.os == 'Windows' && steps.lo-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir -p .cache/lo-msi
+          curl -fsSL --retry 3 -o .cache/lo-msi/lo.msi "${{ steps.lo.outputs.url }}"
+          echo "${{ steps.lo.outputs.sha }}  .cache/lo-msi/lo.msi" | sha256sum -c -
+      - name: tests
+        shell: bash
+        run: node --import tsx --test test/*.test.ts
+        env:
+          SB_SECRETS: file
+
+  windows-installer:
+    name: windows installer + smoke
+    needs: core
+    runs-on: windows-latest
+    permissions:
+      contents: write # release upload on version tags
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.20.2"
+          cache: npm
+          cache-dependency-path: |
+            core/package-lock.json
+            app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - name: build core
+        working-directory: core
+        run: |
+          npm ci
+          npm run build
+      - name: stage resources (node, core, frpc)
+        run: node scripts/prepare-resources.mjs
+      - name: build installer
+        working-directory: app
+        run: |
+          npm ci
+          npx tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-bridge-windows
+          path: |
+            app/src-tauri/target/release/bundle/msi/*.msi
+            app/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+      - name: smoke — install MSI, start, check UI/gates/autostart, kill, check tree is gone
+        shell: pwsh
+        run: ./scripts/smoke-windows.ps1
+      # only after a green smoke; "-rc"/"-test" style tags are marked as pre-release
+      - name: publish release (version tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          pre=""
+          case "$TAG" in *-*) pre="--prerelease" ;; esac
+          gh release create "$TAG" $pre --title "Agent Bridge $TAG" --notes-file docs/RELEASE.md \
+            app/src-tauri/target/release/bundle/msi/*.msi app/src-tauri/target/release/bundle/nsis/*.exe
+      - name: core log
+        if: always()
+        shell: pwsh
+        run: Get-ChildItem "$env:LOCALAPPDATA\cc.ipqw.agentbridge\logs" -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName -Tail 80 }

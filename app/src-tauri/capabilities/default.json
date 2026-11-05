@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Local shell page only; the core-served UI (http://127.0.0.1) gets no IPC.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

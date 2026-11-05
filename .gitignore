@@ -1,0 +1,22 @@
+# secrets — never in git
+.env
+.env.*
+*.pem
+*.key
+*.sk
+secrets/
+**/frpc.local.toml
+**/frps.local.toml
+**/*.secret.*
+
+# build
+node_modules/
+dist/
+core/dist/
+app/src-tauri/target/
+app/src-tauri/resources/
+app/dist/
+*.log
+.cache/
+app/src-tauri/gen/
+app/node_modules/
